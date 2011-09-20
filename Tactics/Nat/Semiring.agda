@@ -1,6 +1,8 @@
 {-# OPTIONS --universe-polymorphism #-}
 module Tactics.Nat.Semiring where
 
+-- SECTION : importing the entire standard library and then some
+
 open import Function using (id; _∘_; type-signature; flip)
 open import Data.Nat using (_+_; _*_; ℕ; zero; suc; _≤_; _⊔_; decTotalOrder) renaming (_≟_ to _≟-ℕ_)
 open import Data.Nat.Properties using (module SemiringSolver; m≤m⊔n; ⊔-⊓-0-isCommutativeSemiringWithoutOne)
@@ -29,6 +31,9 @@ open import Tactics.Util.Answer as Ans using (Answer; AnswerT; module AnswerTKit
 KnownClumps = ∃ (Vec Term)
 open AnswerTKit (StateMonad KnownClumps)
 
+open SemiringSolver
+open DecTotalOrder decTotalOrder using () renaming (trans to ≤-trans)
+
 q+ = quote _+_
 q≡ = quote _≡_
 q* = quote _*_
@@ -36,16 +41,7 @@ qN = quote ℕ
 qS = quote suc
 qZ = quote zero
 
-open SemiringSolver
-open DecTotalOrder decTotalOrder using () renaming (trans to ≤-trans)
-
-explicits : ∀ {X} → List (Arg X) → List X
-explicits {X} = gfilter isExplicit
-  where
-  isExplicit : Arg X → Maybe X
-  isExplicit (arg visible r x) = just x
-  isExplicit (arg hidden r x) = nothing
-  isExplicit (arg instance r x) = nothing
+-- SECTION : Building polynomials and equations
 
 record OpenPolynomial : Set where
   field
@@ -108,12 +104,7 @@ record OpenEquation : Set where
     ; env = reverse e
     })
 
-{-
-reindex-var : (n : ℕ) → ℕ → Answer (Fin n)
-reindex-var zero i = tko "Free variable accessed" [ var i [] ]
-reindex-var (suc n) zero = pureA (fromℕ n)
-reindex-var (suc n) (suc i) = mapA inject₁ (reindex-var n i)
--}
+-- SECTION : helpers for Fin and Vec
 
 private
   push : ∀ {a} {A : Set a} (_=?_ : Decidable (_≡_ {A = A})) → 
@@ -136,6 +127,16 @@ locate _=?_ ( x ∷ xs) q | no ¬p = Dec.map′ (mapΣ Fin.suc there) (push _=?_
 complement : ∀ {n} (i : Fin n) → ℕ
 complement {suc n} Data.Fin.zero = n
 complement (Data.Fin.suc i) = complement i
+
+-- SECTION : Reinterpreting terms as polynomials and equations
+
+explicits : ∀ {X} → List (Arg X) → List X
+explicits {X} = gfilter isExplicit
+  where
+  isExplicit : Arg X → Maybe X
+  isExplicit (arg visible r x) = just x
+  isExplicit (arg hidden r x) = nothing
+  isExplicit (arg instance r x) = nothing
 
 find-var : Term → AnswerM ℕ
 find-var t (n , ts) with locate _≟_ ts t
@@ -196,22 +197,7 @@ interpret-top (def f args) with f ≟-Name q≡ | explicits args
 ... | no ¬p | _ = Ans.tko "not an equation" [ def f args ]
 interpret-top t = Ans.tko "not an equation" [ t ]
 
-{-
-N-ary* : ∀ {ℓ₁ ℓ₂} (n : ℕ) (A : Set ℓ₁) → (Vec A n → Set ℓ₂) → Set (N-ary-level ℓ₁ ℓ₂ n)
-N-ary* zero    A B = B []
-N-ary* (suc n) A B = (x : A) → N-ary* n A (B ∘ _∷_ x)
-
-curryⁿ* : ∀ {n a b} {A : Set a} {B : Vec A n → Set b} →
-          (∀ v → B v) → N-ary* n A B
-curryⁿ* {zero}  f = f []
-curryⁿ* {suc n} f = λ x → curryⁿ* (f ∘ _∷_ x)
-
-solve-goal : (g : Term) {apt : IsOK (interpret-top g)} → _
-solve-goal _ {apt} = λ (pf : Eqʰ depth _≡_ (curryⁿ ⟦ lhs ⟧↓) (curryⁿ ⟦ rhs ⟧↓)) → curryⁿ* (λ ρ → prove ρ lhs rhs (subst₂ _≡_ (left-inverse (⟦ lhs ⟧↓) ρ) (left-inverse (⟦ rhs ⟧↓) ρ) (subst id (left-inverse (λ xs → curryⁿ ⟦ lhs ⟧↓ $ⁿ xs ≡ curryⁿ ⟦ rhs ⟧↓ $ⁿ xs) ρ) ((Equivalence.to (uncurry-∀ⁿ depth) ⟨$⟩ Eqʰ-to-Eq depth _≡_ pf) ρ))))
-  where
-  eqn = IsOK.witness apt
-  open ClosedEquation eqn
--}
+-- SECTION : quoting things by hand
 
 quote-ℕ : ℕ → Term
 quote-ℕ zero = con qZ []
@@ -266,76 +252,13 @@ quote-prove eqn = def (quote prove)
                        [])
   where open ClosedEquation eqn
 
+-- SECTION : public API
+
 solve-goal : (g : Term) {apt : IsOK (interpret-top g)} → Term
 solve-goal _ {apt} = quote-prove eqn
   where eqn = IsOK.witness apt
 
-v0 : Term
-v0 = var 0 []
-
-open import Data.Sum using (_⊎_; inj₁; inj₂)
-open import Data.Unit using (⊤)
-open Data.Empty using (⊥)
-
-IsInj₂ : ∀ {a b} {A : Set a} {B : Set b} → A ⊎ B → Set
-IsInj₂ (inj₁ _) = ⊥
-IsInj₂ (inj₂ _) = ⊤
-
-qq : ∀ {a} {A : Set a} → (t : A) → Set a
-qq {A = A} t = (Σ[ t′ ∶ A ] (t ≡ t′)) ⊎ Term
-
-unqq : ∀ {a} {A : Set a} (v : A) → (k : qq v) {ki2 : IsInj₂ k} → Term
-unqq _ (inj₁ _) {()}
-unqq _ (inj₂ (def quote-_⊎_
-              (_ ∷
-               _ ∷
-               arg visible relevant
-               (def quote-Σ
-                (_ ∷
-                 _ ∷
-                 arg visible relevant quoted-A ∷
-                 arg visible relevant
-                 (def quote-_≡_
-                  (_ ∷
-                   arg hidden relevant quoted-A-again ∷
-                   arg visible relevant quoted-v ∷ []))
-                 ∷ []))
-               ∷ _ ∷ []))) = quoted-v
-unqq _ (inj₂ t) = t
-
-test : Term
-test = unqq (type-signature (Fin 5) (# 2)) quoteGoal g in inj₂ g
-  where
-  open Data.Fin using (#_)
-  postulate
-    n : ℕ
-    ρ : Vec ℕ n
-    e₁ e₂ : Polynomial n
-
-module Test₂ where
-  postulate
-    n : ℕ
-    ρ : Vec ℕ n
-    e₁ e₂ : Polynomial n
-  test₂ : (prove ρ e₁ e₂) ≡ unquote (
-    def (quote prove)
-    (arg hidden  relevant (def (quote n) []) ∷
-     arg visible relevant (def (quote ρ) []) ∷
-     arg visible relevant (def (quote e₁) []) ∷
-     arg visible relevant (def (quote e₂) []) ∷
-     []))
-  test₂ = refl
-{-
-record {
- depth = 3;
- lhs =
-   (((k0 :+ k1) :+ :2) :+ k2) :+ k2;
- rhs =
-   ((:1 :+ (k2 :* :2)) :+ (k2 :+ k2)) :+ :1;
- env = 'a ∷ 'b ∷ 'c ∷ [] })
--}
-shuffle-x : (a b c : ℕ) → Answer ClosedEquation
-shuffle-x a b c = interpret-top (unqq (a + b + 2 + c + b ≡ 1 + b * 2 + (c + a) + 1) quoteGoal g in inj₂ g)
+-- SECTION : tests
 
 shuffle-test : (a b c : ℕ) → a + b + 2 + c + b ≡ 1 + b * 2 + (c + a) + 1
 shuffle-test a b c = quoteGoal g in (unquote (solve-goal g))
