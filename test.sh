@@ -6,4 +6,4 @@
 # first we make sure all deps are compiled
 agda --html -i . -i ~/proj/agda-stdlib/lib/src Test.agda
 rm Test.agdai
-agda --html -i . -i ~/proj/agda-stdlib/lib/src -v 65535 --show-implicit Test.agda
+agda --html -i . -i ~/proj/agda-stdlib/lib/src -v 65535 --show-implicit Test.agda >Test.trace
