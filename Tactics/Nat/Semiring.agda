@@ -8,7 +8,7 @@ open import Data.Nat using (_+_; _*_; ℕ; zero; suc; _≤_; _⊔_; decTotalOrde
 open import Data.Nat.Properties using (module SemiringSolver; m≤m⊔n; ⊔-⊓-0-isCommutativeSemiringWithoutOne)
 open import Algebra.Structures using (module IsCommutativeSemiringWithoutOne)
 import Algebra.RingSolver as RSg
-open import Relation.Binary.PropositionalEquality
+open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Relation.Binary using (module DecTotalOrder; Decidable)
 open import Data.Fin using (Fin; fromℕ; fromℕ≤; inject₁)
 open import Data.Vec using (_∷_; []; Vec; _[_]=_; here; there; reverse)
